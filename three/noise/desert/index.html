@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <style>
+      body {
+        padding: 0;
+        margin: 0;
+        background-color: #347897;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body ontouchmove="event.preventDefault()"></body>
+  <script type="module">
+    import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+    import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+    import SimplexNoise from "https://unpkg.com/simplex-noise@3.0.1/dist/esm/simplex-noise.js";
+
+    // 创建渲染器对象
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio); // 设置像素比
+    document.body.appendChild(renderer.domElement); //body元素中插入canvas对象
+
+    // 创建场景对象
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color("#347897");
+
+    // 创建相机
+    const far = 500000;
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, far);
+    camera.position.set(0, 50, 100);
+
+    // 点光源
+    var point = new THREE.PointLight("#fff", 1);
+    point.position.set(140, 200, 300); // 点光源位置
+    scene.add(point); // 点光源添加到场景中
+
+    // 环境光
+    var ambient = new THREE.AmbientLight("#fff", 0.4);
+    scene.add(ambient);
+
+    // 添加辅助线
+    const axisHelper = new THREE.AxisHelper(500);
+    scene.add(axisHelper);
+
+    // 创建控制器
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.autoRotate = true;
+
+    // 渲染
+    requestAnimationFrame(function render() {
+      requestAnimationFrame(render);
+      controls.update(); // Update controls
+      renderer.render(scene, camera);
+    });
+
+    setTimeout(() => {
+      // 地形数据
+      const length = 1000; // 地形长度
+      const width = 1000; // 宽度
+      const segments = 50; // 密度
+
+      // 几何体，纹理，材质，地面
+      const t = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-sand3.jpg");
+      t.wrapS = THREE.MirroredRepeatWrapping;
+      t.wrapT = THREE.MirroredRepeatWrapping;
+      t.repeat.set(12, 12);
+      let g = new THREE.PlaneGeometry(length, width, segments, segments);
+      let m = new THREE.MeshStandardMaterial({
+        map: t,
+        //color: "#ffff00",
+        side: THREE.DoubleSide,
+      });
+      let plane = new THREE.Mesh(g, m);
+      plane.rotateX(-Math.PI / 2);
+      scene.add(plane);
+
+      // 采样噪声
+      const simplex = new SimplexNoise("seed111333"); // simplex噪声
+      const noiseArr = [];
+      const vertexNum = segments + 1;
+      for (let i = 0; i < vertexNum; i++) {
+        for (let j = 0; j < vertexNum; j++) {
+          // 采样噪声值
+          const sampleRange = 6;
+          let noise = simplex.noise2D(i * (sampleRange / vertexNum), j * (sampleRange / vertexNum));
+          noise = noise * 0.5 + 0.5; // 调整
+          noise *= 30; // 放大10倍
+          noiseArr.push(noise);
+        }
+      }
+
+      // 修正地形
+      noiseArr.forEach((noise, index) => {
+        g.attributes.position.setZ(index, noise);
+      });
+
+      // 更新顶点法线
+      const faceArr = [];
+      const indexArr = g.index.array; // 三角面顶点索引列表
+      for (let i = 0; i < indexArr.length; ) {
+        faceArr.push([indexArr[i], indexArr[i + 1], indexArr[i + 2]]);
+        i += 3;
+      }
+
+      // 遍历顶点，更新线
+      for (let i = 0; i < g.attributes.position.count; i++) {
+        // 找出当前顶点关联的三角面
+        const relativeFace = [];
+        for (let j = 0; j < faceArr.length; j++) {
+          if (faceArr[j].includes(i)) {
+            relativeFace.push({ normal: null, vertexIndexArr: faceArr[j] });
+          }
+        }
+
+        // 计算三角面法线
+        relativeFace.forEach((face) => {
+          const vertexArr = [];
+          face.vertexIndexArr.forEach((index) => {
+            const list = g.attributes.position.array;
+            vertexArr.push([list[3 * index], list[3 * index + 1], list[3 * index + 2]]);
+          });
+          const [v0, v1, v2] = vertexArr; // 提取顶点
+          const vector0 = [v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]]; // 向量0
+          const vector1 = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]]; // 向量1
+          const [x0, y0, z0] = vector0;
+          const [x1, y1, z1] = vector1;
+          // 计算向量积，并归一化
+          let normal = [y0 * z1 - z0 * y1, z0 * x1 - x0 * z1, x0 * y1 - y0 * x1];
+          const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+          normal = [normal[0] / length, normal[1] / length, normal[2] / length];
+          face.normal = normal;
+        });
+
+        // 计算顶点的法线
+        let normal = relativeFace.reduce(
+          (rs, item) => {
+            return [rs[0] + item.normal[0], rs[1] + item.normal[1], rs[2] + item.normal[2]];
+          },
+          [0, 0, 0]
+        );
+
+        // 顶点法线归一化
+        const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+        normal = [normal[0] / length, normal[1] / length, normal[2] / length];
+
+        // 更新顶点法线
+        g.attributes.normal.setXYZ(i, normal[0], normal[1], normal[2]);
+      }
+    });
+  </script>
+</html>

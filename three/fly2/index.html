@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes" />
+    <metahttp-equiv ="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script type="module">
+      import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+      import { GLTFLoader } from "https://cdn.skypack.dev/three@v0.129.0/examples//jsm/loaders/GLTFLoader.js";
+      import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+
+      // 创建渲染器
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight); // 设置canvas画布大小
+      renderer.setPixelRatio(window.devicePixelRatio); // 设置像素比，图元光栅化时采样的像素点更多（可以推断出物理像素），画面更精细
+      document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+      // 创建场景
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color("#347897");
+
+      // 辅助线
+      var axisHelper = new THREE.AxisHelper(500);
+      scene.add(axisHelper);
+
+      // 添加点光源
+      let light1 = new THREE.PointLight("#fff", 1);
+      light1.position.set(0, 1160, -22160);
+      scene.add(light1);
+
+      //环境光
+      let ambient = new THREE.AmbientLight("#fff", 1);
+      scene.add(ambient);
+
+      // 创建相机
+      var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
+      camera.position.set(-500, 330, 170); // 设置相机位置
+
+      // 创建控制器
+      let controls = new OrbitControls(camera, renderer.domElement);
+      //controls.autoRotate = true;
+
+      // 渲染
+      !(function render() {
+        controls.update(); // Update controls
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      })();
+
+      // 飞线
+      class Fly {
+        constructor(points, length, circle = 2, color = "#ff00ff", opacity = 1, size = 10) {
+          this.points = points; // 路径
+          this.length = length; // 长度（粒子数）
+          this.circle = circle; // 周期
+          this.color = color; // 颜色
+          this.opacity = opacity; // 透明度
+          this.size = size; // 大小
+          this.progress = 0;
+          this.frameId = null;
+          this.geometry = null;
+          this.material = null;
+          this.texture = null;
+          this.obj = null;
+          this.createFly();
+        }
+
+        createFly() {
+          // 几何体
+          this.geometry = new THREE.BufferGeometry();
+          this.updateFly();
+
+          // 纹理和材质
+          this.texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-circle-gradient1.png");
+          this.material = new THREE.PointsMaterial({
+            color: this.color,
+            map: this.texture,
+            // alphaTest: 0.9,
+            transparent: true,
+            depthWrite: false,
+            opacity: this.opacity,
+            //blending: THREE.AdditiveBlending,
+            size: this.size,
+            sizeAttenuation: true,
+          });
+
+          // 修正着色器
+          this.material.onBeforeCompile = (shader) => {
+            const vertex = `
+              attribute float aScale;
+              void main() {
+            `;
+            const vertex1 = `gl_PointSize = size * aScale;`;
+            shader.vertexShader = shader.vertexShader.replace("void main() {", vertex);
+            shader.vertexShader = shader.vertexShader.replace("gl_PointSize = size;", vertex1);
+          };
+
+          // 物体
+          this.obj = new THREE.Points(this.geometry, this.material);
+        }
+
+        // 更新
+        updateFly() {
+          // 计算新数据
+          const posArr = [];
+          const scaleArr = [];
+          const posIndex = Math.floor(this.progress * this.points.length);
+          const flyPointArr = this.points.filter((point, index) => {
+            if (index >= posIndex && index <= posIndex + this.length) return true;
+          });
+          flyPointArr.forEach((point, index) => {
+            posArr.push(...point);
+            scaleArr.push((index + 1) / this.length);
+          });
+          // 更新几何体
+          this.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(posArr), 3));
+          this.geometry.setAttribute("aScale", new THREE.BufferAttribute(new Float32Array(scaleArr), 1));
+        }
+
+        // 移动
+        move() {
+          if (this.frameId) return;
+          const clock = new THREE.Clock(); // 时钟
+          const h = () => {
+            this.frameId = requestAnimationFrame(h);
+            const dt = clock.getDelta();
+            this.progress += dt / this.circle; // 更新进度
+            if (this.progress > 1) this.progress = 1;
+            this.updateFly();
+            if (this.progress == 1) this.progress = 0;
+          };
+          this.frameId = requestAnimationFrame(h);
+        }
+
+        // 停止
+        stop() {
+          if (this.frameId) {
+            cancelAnimationFrame(this.frameId);
+            this.frameId = null;
+          }
+        }
+      }
+
+      // 飞线1
+      !(() => {
+        // 路径
+        const points = [];
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(-400, 10, 0),
+          new THREE.Vector3(-50, 10, 150),
+          new THREE.Vector3(50, 10, -50),
+          new THREE.Vector3(300, 10, 150),
+          new THREE.Vector3(350, 10, 150),
+          new THREE.Vector3(500, 150, 0),
+          new THREE.Vector3(600, 0, 0),
+        ]);
+        // 采样
+        curve.getSpacedPoints(500).forEach((point) => {
+          const { x, y, z } = point;
+          points.push([x, y, z]);
+        });
+        const length = 50;
+        const circle = 3;
+        const color = "#ee0000";
+        const opacity = 1;
+        const size = 15;
+        const fly = new Fly(points, length, circle, color, opacity, size);
+        fly.move();
+        scene.add(fly.obj);
+
+        // 路径轨迹
+        const material = new THREE.LineBasicMaterial({
+          color: "#FFff00",
+        });
+        const geometry = new THREE.BufferGeometry().setFromPoints(curve.getSpacedPoints(5000));
+        const line = new THREE.Line(geometry, material);
+        scene.add(line);
+      })();
+
+      // 飞线2
+      !(() => {
+        // 路径
+        const points = [];
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(-400, 10, -200),
+          new THREE.Vector3(-50, 10, -50),
+          new THREE.Vector3(50, 10, -250),
+          new THREE.Vector3(300, 10, -50),
+          new THREE.Vector3(350, 10, -50),
+          new THREE.Vector3(500, 150, -200),
+          new THREE.Vector3(600, 0, -200),
+        ]);
+        // 采样
+        curve.getSpacedPoints(500).forEach((point) => {
+          const { x, y, z } = point;
+          points.push([x, y, z]);
+        });
+
+        const length = 50;
+        const circle = 3;
+        const color = "#eeee00";
+        const opacity = 1;
+        const size = 15;
+        const fly = new Fly(points, length, circle, color, opacity, size);
+        fly.move();
+        scene.add(fly.obj);
+
+        // 路径轨迹
+        const material = new THREE.LineBasicMaterial({
+          color: "#FFff00",
+        });
+        const geometry = new THREE.BufferGeometry().setFromPoints(curve.getSpacedPoints(5000));
+        const line = new THREE.Line(geometry, material);
+        scene.add(line);
+      })();
+
+      // 创建一个地面作参考
+      const texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-wood2.jpg"); // 立方纹理加载器
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(10, 10);
+      var geometry1 = new THREE.PlaneGeometry(3000, 3000); // 平面几何体
+      var material1 = new THREE.MeshPhongMaterial({ map: texture, side: THREE.DoubleSide });
+      var plane = new THREE.Mesh(geometry1, material1); // 创建模型
+      plane.rotateX((Math.PI / 180) * 90);
+      scene.add(plane); // 加入场景
+    </script>
+  </body>
+</html>

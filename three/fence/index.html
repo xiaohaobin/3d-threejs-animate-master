@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes" />
+    <metahttp-equiv ="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <style>
+      html,
+      body,
+      canvas {
+        padding: 0;
+        margin: 0;
+        background-color: #347897;
+        height: 100vh;
+        width: 100vw;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script type="module">
+      import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+      import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+
+      // 创建渲染器
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio); // 设置像素比
+      document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+      // 创建场景
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color("#347897");
+
+      // 辅助线
+      var axisHelper = new THREE.AxisHelper(500);
+      scene.add(axisHelper);
+
+      // 添加点光源
+      let light1 = new THREE.PointLight("#fff", 1);
+      light1.position.set(0, 1160, -22160);
+      scene.add(light1);
+
+      // 添加点光源
+      let light2 = new THREE.PointLight("#fff", 2);
+      light2.position.set(11110, 1160, 22160);
+      scene.add(light2);
+
+      //环境光
+      let ambient = new THREE.AmbientLight("#fff", 0.8);
+      scene.add(ambient);
+
+      // 创建相机
+      var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
+      camera.position.set(0, 150, 270); // 设置相机位置
+
+      // 创建控制器
+      let controls = new OrbitControls(camera, renderer.domElement);
+      controls.autoRotate = true;
+
+      // 渲染
+      !(function render() {
+        controls.update(); // Update controls
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      })();
+
+      // 坐标
+      const points = [
+        [-100, 0, -100],
+        [200, 0, 0],
+        [200, 0, 150],
+        [-200, 0, 100],
+        [-20, 0, 0],
+        [-100, 0, -100],
+      ];
+      const height = 30; // 高度
+      const color1 = "#ff00ff"; // 颜色
+      const textureUrl1 = "http://182.43.179.137:81/public/images/texture-gradient-left.png"; // 纹理
+      // 围栏距离
+      const pointDistance = [];
+      const distance = points.reduce((totalDistance, point, index) => {
+        let segmentDistance = 0;
+        if (index > 0) {
+          let lastPoint = new THREE.Vector3(...points[index - 1]);
+          let currPoint = new THREE.Vector3(...point);
+          segmentDistance = lastPoint.distanceTo(currPoint);
+        }
+        totalDistance += segmentDistance;
+        pointDistance.push(totalDistance);
+        return totalDistance;
+      }, 0);
+
+      // 几何体
+      const geometry = new THREE.BufferGeometry(); // 缓冲几何体
+      const posArr = [];
+      const uvArr = [];
+      // 遍历坐标
+      points.forEach((point, index) => {
+        if (index == 0) return;
+        const lastPoint = points[index - 1];
+
+        // 三角面1
+        posArr.push(...lastPoint);
+        uvArr.push(pointDistance[index - 1] / distance, 0);
+        posArr.push(...point);
+        uvArr.push(pointDistance[index] / distance, 0);
+        posArr.push(lastPoint[0], lastPoint[1] + height, lastPoint[2]);
+        uvArr.push(pointDistance[index - 1] / distance, 1);
+
+        // 三角面2
+        posArr.push(...point);
+        uvArr.push(pointDistance[index] / distance, 0);
+        posArr.push(point[0], point[1] + height, point[2]);
+        uvArr.push(pointDistance[index] / distance, 1);
+        posArr.push(lastPoint[0], lastPoint[1] + height, lastPoint[2]);
+        uvArr.push(pointDistance[index - 1] / distance, 1);
+      });
+      geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(posArr), 3));
+      geometry.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uvArr), 2));
+
+      // 纹理
+      const texture = new THREE.TextureLoader().load(textureUrl1);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+
+      // 材质
+      const material = new THREE.MeshBasicMaterial({
+        color: color1,
+        map: texture,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+
+      // 围栏
+      const mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
+
+      // 偏移
+      function textrue_offset(texture, direction = "right", speed = 0.5) {
+        // 开始时间
+        const start = Date.now();
+        const h = () => {
+          requestAnimationFrame(h);
+          const now = Date.now();
+          const offset = ((now - start) / 1000) * speed;
+          switch (direction) {
+            case "left":
+              texture.offset = new THREE.Vector2(offset, 0); //纹理偏移
+              break;
+            case "right":
+              texture.offset = new THREE.Vector2(-offset, 0);
+              break;
+            case "top":
+              texture.offset = new THREE.Vector2(0, -offset);
+              break;
+            case "left":
+              texture.offset = new THREE.Vector2(0, offset);
+              break;
+          }
+        };
+        requestAnimationFrame(h);
+      }
+      textrue_offset(texture, "right", 1);
+
+      const color2 = "#ffff00"; // 围栏2的颜色
+      const textureUrl2 = "http://182.43.179.137:81/public/images/texture-vertical-line.png";
+      !(() => {
+        const height = 40;
+        // 几何体
+        const geometry = new THREE.BufferGeometry(); // 缓冲几何体
+        const posArr = [];
+        const uvArr = [];
+        // 遍历坐标
+        points.forEach((point, index) => {
+          if (index == 0) return;
+          const lastPoint = points[index - 1];
+
+          // 三角面1
+          posArr.push(...lastPoint);
+          uvArr.push(pointDistance[index - 1] / distance, 0);
+          posArr.push(...point);
+          uvArr.push(pointDistance[index] / distance, 0);
+          posArr.push(lastPoint[0], lastPoint[1] + height, lastPoint[2]);
+          uvArr.push(pointDistance[index - 1] / distance, 1);
+
+          // 三角面2
+          posArr.push(...point);
+          uvArr.push(pointDistance[index] / distance, 0);
+          posArr.push(point[0], point[1] + height, point[2]);
+          uvArr.push(pointDistance[index] / distance, 1);
+          posArr.push(lastPoint[0], lastPoint[1] + height, lastPoint[2]);
+          uvArr.push(pointDistance[index - 1] / distance, 1);
+        });
+        geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(posArr), 3));
+        geometry.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uvArr), 2));
+
+        // 纹理
+        const texture = new THREE.TextureLoader().load(textureUrl2);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+
+        // 材质
+        const material = new THREE.MeshBasicMaterial({
+          color: color2,
+          map: texture,
+          transparent: true,
+          opacity: 1,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+
+        // 创建围栏
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        texture.repeat.set(10, 1); // 平铺
+        textrue_offset(texture, "top", 0.5);
+      })();
+
+      const color3 = "#ffff00"; // 围栏3的颜色
+      const textureUrl3 = "http://182.43.179.137:81/public/images/texture-gradient-top.png";
+      !(() => {
+        const height = 40;
+        // 几何体
+        const geometry = new THREE.BufferGeometry(); // 缓冲几何体
+        const posArr = [];
+        const uvArr = [];
+        // 遍历坐标
+        points.forEach((point, index) => {
+          if (index == 0) return;
+          const lastPoint = points[index - 1];
+
+          // 三角面1
+          posArr.push(...lastPoint);
+          uvArr.push(pointDistance[index - 1] / distance, 0);
+          posArr.push(...point);
+          uvArr.push(pointDistance[index] / distance, 0);
+          posArr.push(lastPoint[0], lastPoint[1] + height, lastPoint[2]);
+          uvArr.push(pointDistance[index - 1] / distance, 1);
+
+          // 三角面2
+          posArr.push(...point);
+          uvArr.push(pointDistance[index] / distance, 0);
+          posArr.push(point[0], point[1] + height, point[2]);
+          uvArr.push(pointDistance[index] / distance, 1);
+          posArr.push(lastPoint[0], lastPoint[1] + height, lastPoint[2]);
+          uvArr.push(pointDistance[index - 1] / distance, 1);
+        });
+        geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(posArr), 3));
+        geometry.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uvArr), 2));
+
+        // 纹理
+        const texture = new THREE.TextureLoader().load(textureUrl3);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+
+        // 材质
+        const material = new THREE.MeshBasicMaterial({
+          color: color3,
+          map: texture,
+          transparent: true,
+          opacity: 1,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+
+        // 创建围栏
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+      })();
+
+      // 地面
+      !(() => {
+        const length = 1000;
+        const width = 1000;
+        const texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-stone5.jpg"); // 立方纹理加载器
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(10, 10);
+        var geometry = new THREE.PlaneGeometry(length, width); // 平面几何体
+        var material = new THREE.MeshPhongMaterial({ map: texture, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(geometry, material); // 创建模型
+        plane.rotateX((Math.PI / 180) * 90);
+        plane.name = "plane";
+        scene.add(plane); // 加入场景
+      })();
+    </script>
+  </body>
+</html>

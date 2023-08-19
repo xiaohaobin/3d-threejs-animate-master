@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes" />
+    <metahttp-equiv ="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script type="module">
+      import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+      import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+
+      // 创建渲染器
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight); // 设置canvas画布大小
+      renderer.setPixelRatio(window.devicePixelRatio); // 设置像素比，图元光栅化时采样的像素点更多（可以推断出物理像素），画面更精细
+      document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+      // 创建场景
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color("#347897");
+
+      // 辅助线
+      var axisHelper = new THREE.AxisHelper(500);
+      scene.add(axisHelper);
+
+      // 添加点光源
+      let light1 = new THREE.PointLight("#fff", 0.8);
+      light1.position.set(2160, 1160, 0);
+      scene.add(light1);
+
+      //环境光
+      let ambient = new THREE.AmbientLight("#fff", 0.5);
+      scene.add(ambient);
+
+      // 创建相机
+      var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 10000);
+      camera.position.set(0, 550, 870); // 设置相机位置
+
+      // 创建控制器
+      let controls = new OrbitControls(camera, renderer.domElement);
+      //controls.autoRotate = true
+
+      // 渲染
+      !(function render() {
+        controls.update(); // Update controls
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      })();
+      
+      /**
+       * 定义光波
+       */
+      class LightWave {
+        // 构造函数
+        constructor(position, radius = 100, color = "#fff", diffuseR = 100, circle = 1, textureUrl) {
+          this.position = position; // 光波的位置
+          this.radius = radius; // 光波的半径
+          this.color = color; // 光波的颜色
+          this.diffuseR = diffuseR; // 扩散半径
+          this.circle = circle; // 扩散动画的周期
+          this.textureUrl = textureUrl; // 光波纹理
+          this.frameId = null; // 波动动画帧id
+          this.geometry = null; // 光波的threejs几何体
+          this.material = null; // 光波的threejs材质
+          this.texture = null; // 光波的threejs纹理
+          this.obj = null; // 光波的threejs物体
+          this.createLightWave();
+        }
+
+        // 创建光波
+        createLightWave() {
+          // 创建圆形几何体
+          this.geometry = new THREE.CircleGeometry(this.radius, this.radius * 10 > 100 ? this.radius * 10 : 100);
+
+          // 创建纹理
+          this.texture = new THREE.TextureLoader().load(this.textureUrl);
+
+          // 创建材质
+          this.material = new THREE.MeshBasicMaterial({
+            color: this.color, // 颜色
+            map: this.texture, // 纹理贴图
+            transparent: true, // 开启透明度
+            depthWrite: false, // 禁止深度写入
+            side: THREE.DoubleSide, // 两面可见
+            blending: THREE.AdditiveBlending, // 加法混合
+          });
+
+          // 创建物体
+          this.obj = new THREE.Mesh(this.geometry, this.material);
+          this.obj.rotateX(-Math.PI / 2); // 旋转-90度
+          this.obj.position.set(...this.position); // 设置位置
+        }
+
+        // 开启波动
+        start() {
+          if (this.frameId) return; // 正在波动中，退出
+          const st = Date.now(); // 开始时间
+          // 请求动画帧
+          const h = () => {
+            this.frameId = requestAnimationFrame(h);
+            const dt = (Date.now() - st) / 1000; // dt单位秒
+            let progress = (dt % this.circle) / this.circle; // 进度
+            // progress = THREE.MathUtils.smoothstep(progress, 0, 1); // 平滑，效果不好
+            const scale = (this.diffuseR * progress + this.radius) / this.radius; // 缩放
+            this.obj.scale.set(scale, scale, scale);
+          };
+          this.frameId = requestAnimationFrame(h);
+        }
+
+        // 停止波动
+        stop() {
+          if (this.frameId) {
+            cancelAnimationFrame(this.frameId); // 取消动画
+            this.frameId = null; // 清空请求动画帧的id
+            this.obj.scale.set(1, 1, 1);
+          }
+        }
+      }
+
+      // 创建光波
+      const position = [0, 50, 0]; // 光波位置
+      const radius = 120; // 光波半径
+      const color = "#ff0981"; // 颜色
+      const diffuseR = 150; // 扩散半径
+      const circle = 0.8; // 扩散动画时间
+      const texture = "wave.png"; // 光波纹理
+      const lightWave = new LightWave(position, radius, color, diffuseR, circle, texture);
+      lightWave.start(); // 开启播放
+      scene.add(lightWave.obj);
+
+      // 3秒后暂停
+      setTimeout(() => {
+        lightWave.stop();
+      }, 3000);
+
+      // 6秒后开启
+      setTimeout(() => {
+        lightWave.start();
+      }, 5000);
+    </script>
+  </body>
+</html>

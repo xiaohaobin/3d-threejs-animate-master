@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <style>
+      body {
+        padding: 0;
+        margin: 0;
+        background-color: #347897;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body ontouchmove="event.preventDefault()"></body>
+  <script type="module">
+    import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+    import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+    import SimplexNoise from "https://unpkg.com/simplex-noise@3.0.1/dist/esm/simplex-noise.js";
+
+    // 创建渲染器对象
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio); // 设置像素比
+    document.body.appendChild(renderer.domElement); //body元素中插入canvas对象
+
+    // 创建场景对象
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color("#347897");
+
+    // 创建相机
+    const far = 500000;
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, far);
+    camera.position.set(0, 150, 300);
+
+    // 点光源
+    var point = new THREE.PointLight("#fff", 1);
+    point.position.set(400, 200, 300); // 点光源位置
+    scene.add(point); // 点光源添加到场景中
+
+    // 点光源
+    var point1 = new THREE.PointLight("#fff", 1);
+    point1.position.set(400, -200, -300); // 点光源位置
+    scene.add(point1); // 点光源添加到场景中
+
+    // 环境光
+    var ambient = new THREE.AmbientLight("#fff", 0.5);
+    scene.add(ambient);
+
+    // 添加辅助线
+    const axisHelper = new THREE.AxisHelper(500);
+    scene.add(axisHelper);
+
+    // 创建控制器
+    const controls = new OrbitControls(camera, renderer.domElement);
+    //controls.autoRotate = true;
+
+    // 渲染
+    requestAnimationFrame(function render() {
+      requestAnimationFrame(render);
+      controls.update(); // Update controls
+      renderer.render(scene, camera);
+    });
+
+    // 地形
+    const length = 2; // 地形块的长度
+    const width = 2; // 宽度
+    const height = 10; // 高度
+    const num = 200; // 密度
+    const container = new THREE.Group(); // 容器
+    container.position.set(-(length * num) / 2, 0, -(width * num) / 2); // 位置跳转
+    scene.add(container);
+    const simplex = new SimplexNoise("seed111333"); // simplex噪声
+
+    // 几何体和材质
+    let g = new THREE.BoxGeometry(length, height, width, 1, 1, 1);
+    let m = new THREE.MeshPhongMaterial({
+      color: "#FFD700",
+      side: THREE.DoubleSide,
+    });
+
+    // 地形块
+    for (let i = 0; i < num; i++) {
+      for (let j = 0; j < num; j++) {
+        let box = new THREE.Mesh(g, m);
+        box.position.set(0, height / 2, 0); // 调整位置
+        const group = new THREE.Group();
+        group.add(box); // 加入group
+        group.name = "block";
+        const x = i * length + length / 2;
+        const z = j * width + width / 2;
+        group.position.set(x, 1, z); // 调整group位置
+        container.add(group); // 加入容器
+
+        // 采样噪声值
+        const sampleWidth = 6;
+        let noise = simplex.noise2D((i / num) * sampleWidth, (j / num) * sampleWidth); // 输入地形块位置
+        noise = noise * 0.5 + 0.5; // 调整
+        group.scale_y = noise * 2; // 应用噪声
+        group.scale.set(1, group.scale_y, 1);
+      }
+    }
+  </script>
+</html>

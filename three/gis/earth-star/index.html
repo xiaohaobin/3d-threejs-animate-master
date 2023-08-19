@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes" />
+    <metahttp-equiv ="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script type="module">
+      import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+      import { GLTFLoader } from "https://cdn.skypack.dev/three@v0.129.0/examples//jsm/loaders/GLTFLoader.js";
+      import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+      import { BufferGeometryUtils } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/utils/BufferGeometryUtils.js";
+
+      // 创建渲染器
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight); // 设置canvas画布大小
+      renderer.setPixelRatio(window.devicePixelRatio); // 设置像素比，图元光栅化时采样的像素点更多（可以推断出物理像素），画面更精细
+      document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+      // 创建场景
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color("#347897");
+
+      // 辅助线
+      var axisHelper = new THREE.AxisHelper(500);
+      scene.add(axisHelper);
+
+      // 添加点光源
+      let light1 = new THREE.PointLight("#fff", 0.8);
+      light1.position.set(2160, 1160, 123120);
+      //scene.add(light1);
+
+      //环境光
+      let ambient = new THREE.AmbientLight("#fff", 0.7);
+      scene.add(ambient);
+
+      // 创建相机
+      var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 10000);
+      camera.position.set(0, 730, 970); // 设置相机位置
+
+      // 创建控制器
+      let controls = new OrbitControls(camera, renderer.domElement);
+      controls.autoRotate = true;
+
+      // 渲染
+      !(function render() {
+        controls.update(); // Update controls
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      })();
+
+      // 先创建一个球做底座
+      const g = new THREE.SphereGeometry(6378137 / 10000, 100, 100); // 球的半径为地球半径缩小10000倍
+      const m = new THREE.MeshStandardMaterial({
+        // 用世界地图作为底图
+        map: new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-earth3.png"),
+        //blending: THREE.AdditiveBlending,
+      });
+      scene.add(new THREE.Mesh(g, m));
+
+      /**
+       * 经纬度转地固坐标
+       */
+      function lon2xyz(longitude, latitude, R = 6378137) {
+        var lon = (longitude * Math.PI) / 180;
+        var lat = (latitude * Math.PI) / 180;
+
+        var x = R * Math.cos(lat) * Math.cos(lon);
+        var y = R * Math.cos(lat) * Math.sin(lon);
+        var z = R * Math.sin(lat);
+        return { x: x, y: y, z: z };
+      }
+
+      // 边界线
+      !(() => {
+        // 加载地理信息数据
+        var loader = new THREE.FileLoader().setResponseType("json");
+        loader.load("http://182.43.179.137:81/public/map/世界--国家级行政区域--地理信息数据--.json", function (data) {
+          // console.log(data) // 最好查看下data结构
+          // 遍历
+          data.features.forEach((country) => {
+            if (country.geometry) {
+              // 格式统一
+              if (country.geometry.type === "Polygon") {
+                country.geometry.coordinates = [country.geometry.coordinates];
+              }
+
+              // 遍历边界数组
+              country.geometry.coordinates.forEach((borderShapeArr) => {
+                borderShapeArr.forEach((borderShape) => {
+                  const points = [];
+                  borderShape.forEach((coord, index) => {
+                    let point = lon2xyz(coord[0], coord[1]); //经纬度转地固坐标
+                    // 地固坐标姿态修正
+                    let { x, y, z } = new THREE.Vector3(point.x, point.y, point.z).applyAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+                    points.push(new THREE.Vector3((x / 10000) * 1.001, (y / 10000) * 1.001, (z / 10000) * 1.001)); // 地球半径缩小10000倍,再放大1.001倍
+                  });
+
+                  // 画出边界轮廓
+                  const material = new THREE.LineBasicMaterial({ color: "#4B0082" });
+                  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                  const line = new THREE.Line(geometry, material);
+                  scene.add(line);
+                });
+              });
+            }
+          });
+        });
+      })();
+
+      // 全球夜晚密集亮点
+      !(() => {
+        var loader = new THREE.FileLoader().setResponseType("json"); //three.js文件加载类FileLoader：封装了XMLHttpRequest
+        loader.load("http://182.43.179.137:81/public/map/全球夜晚密集亮点（假设）.json", function (data) {
+          var coordArr = data.points; //经纬度
+          var verticesArr = []; //顶点
+          for (var i = 0; i < coordArr.length; i += 2) {
+            // 经纬度转地固坐标
+            let point = lon2xyz(coordArr[i], coordArr[i + 1]);
+            // 姿态修正
+            let { x, y, z } = new THREE.Vector3(point.x, point.y, point.z).applyAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+            verticesArr.push((x / 10000) * 1.0001, (y / 10000) * 1.0001, (z / 10000) * 1.0001); // 地球半径缩小10000倍,再放大1.001倍
+          }
+
+          //Buffer几何体
+          var geometry = new THREE.BufferGeometry();
+          geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verticesArr), 3)); //3个浮点数表示一个点
+          var material = new THREE.PointsMaterial({
+            color: "#FFD700",
+            size: 0.5, //点尺寸
+          }); //材质对象
+          var points = new THREE.Points(geometry, material);
+          scene.add(points);
+        });
+      })();
+    </script>
+  </body>
+</html>
